@@ -1,0 +1,70 @@
+import os
+import json
+import deepdiff
+import pika
+
+filename = 'data.json'
+with open(filename, 'r', encoding='utf-8') as infile:
+    try:
+        print("Loading")
+        old_data = json.load(infile)
+    except:
+        old_data = {}
+
+def dict_diff(dict_a, dict_b, show_value_diff=True):
+  result = {}
+  result['added']   = {k: dict_b[k] for k in set(dict_b) - set(dict_a)}
+  result['removed'] = {k: dict_a[k] for k in set(dict_a) - set(dict_b)}
+  if show_value_diff:
+    common_keys =  set(dict_a) & set(dict_b)
+    result['value_diffs'] = {
+      k:dict_b[k]
+      for k in common_keys
+      if dict_a[k] != dict_b[k]
+    }
+  return result
+
+
+def getMetrics(metrics, stream):
+
+    stream_metrics = stream.split('\n')
+    for container in stream_metrics[1:-1]:
+        metric_list = list(filter(lambda x: x!='', container.split()))
+        metrics[metric_list[0]] =  {
+            'name' : metric_list[1],
+            'cpu_util': metric_list[2]
+        }
+
+class Metrics:
+    name: str
+    cpu: float
+    mem: float
+    def __init__(self, name, cpu, mem):
+      self.name = name
+      self.cpu = cpu
+      self.mem = mem
+
+metrics = {}
+stream = os.popen('sudo podman stats -a --no-stream')
+output = stream.read()
+getMetrics(metrics, output)
+
+for i in metrics:
+    print(metrics[i])
+
+
+with open(filename, 'w', encoding='utf-8') as outfile:
+    json.dump(metrics, outfile)
+
+diff = dict_diff(old_data, metrics)
+
+connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+channel = connection.channel()
+channel.queue_declare(queue='hello')
+channel.basic_publish(exchange='',
+                      routing_key='hello',
+                      body=json.dumps(diff))
+print(" [x] Sent 'Hello World!'")
+connection.close()
+
+print(diff)
