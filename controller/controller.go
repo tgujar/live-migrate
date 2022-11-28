@@ -2,11 +2,13 @@ package main
 
 import (
 	"log"
+	"fmt"
 	"encoding/json"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+var vmstats map[string]map[string]map[string]string	
 
 func failOnError(err error, msg string) {
 	if err != nil {
@@ -14,7 +16,30 @@ func failOnError(err error, msg string) {
 	}
 }
 
+func updateMap(data map[string]map[string]map[string]string) {
+	log.Printf("Received message: %s", data["value_diffs"])
+
+	if(vmstats["vm1"] == nil) {
+		vmstats["vm1"] = make(map[string]map[string]string)
+	}
+	for key, element := range data["value_diffs"] {
+		fmt.Println("Key:", key, "=>", "Element:", element)
+        vmstats["vm1"][key] = element
+    }
+	for key, element := range data["added"] {
+		fmt.Println("Key:", key, "=>", "Element:", element)
+		vmstats["vm1"][key] = element    
+	}
+	for key, element := range data["removed"] {
+		fmt.Println("Key:", key, "=>", "Element:", element)
+        delete(vmstats["vm1"], key)
+    }
+}
+
+
 func main() {
+	
+	vmstats = make(map[string]map[string]map[string]string)
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
@@ -48,12 +73,17 @@ func main() {
 
 	go func() {
 		for d := range msgs {
-			var data map[string]map[string]map[string]interface{}
+			var data map[string]map[string]map[string]string
 			err := json.Unmarshal([]byte(d.Body), &data)
 			if err != nil {
 				panic(err)
 			}
-			log.Printf("Received message: %s", data["value_diffs"])
+			updateMap(data);
+			
+			fmt.Println("-------------Map-------------")
+			for k, v := range vmstats {
+				fmt.Println(k, v)
+			}
 		}
 	}()
 
