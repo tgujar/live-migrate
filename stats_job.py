@@ -2,6 +2,11 @@ import os
 import json
 import deepdiff
 import pika
+import socket
+
+hostname=socket.gethostname()
+IPAddr=socket.gethostbyname(hostname)
+
 
 filename = 'data.json'
 with open(filename, 'r', encoding='utf-8') as infile:
@@ -35,15 +40,6 @@ def getMetrics(metrics, stream):
             'cpu_util': metric_list[2]
         }
 
-class Metrics:
-    name: str
-    cpu: float
-    mem: float
-    def __init__(self, name, cpu, mem):
-      self.name = name
-      self.cpu = cpu
-      self.mem = mem
-
 metrics = {}
 stream = os.popen('sudo podman stats -a --no-stream')
 output = stream.read()
@@ -56,7 +52,7 @@ for i in metrics:
 with open(filename, 'w', encoding='utf-8') as outfile:
     json.dump(metrics, outfile)
 
-diff = dict_diff(old_data, metrics)
+diff = { IPAddr : dict_diff(old_data, metrics)}
 
 connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
 channel = connection.channel()

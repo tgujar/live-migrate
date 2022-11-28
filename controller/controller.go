@@ -16,24 +16,25 @@ func failOnError(err error, msg string) {
 	}
 }
 
-func updateMap(data map[string]map[string]map[string]string) {
-	log.Printf("Received message: %s", data["value_diffs"])
-
-	if(vmstats["vm1"] == nil) {
-		vmstats["vm1"] = make(map[string]map[string]string)
+func updateMap(data map[string]map[string]map[string]map[string]string) {
+	for vm, vmmap := range data {
+		log.Printf("Received message: %s :: %s", vm, vmmap)
+		if(vmstats[vm] == nil) {
+			vmstats[vm] = make(map[string]map[string]string)
+		}
+		for key, element := range vmmap["value_diffs"] {
+			fmt.Println("Key:", key, "=>", "Element:", element)
+			vmstats[vm][key] = element
+		}
+		for key, element := range vmmap["added"] {
+			fmt.Println("Key:", key, "=>", "Element:", element)
+			vmstats[vm][key] = element    
+		}
+		for key, element := range vmmap["removed"] {
+			fmt.Println("Key:", key, "=>", "Element:", element)
+			delete(vmstats[vm], key)
+		}
 	}
-	for key, element := range data["value_diffs"] {
-		fmt.Println("Key:", key, "=>", "Element:", element)
-        vmstats["vm1"][key] = element
-    }
-	for key, element := range data["added"] {
-		fmt.Println("Key:", key, "=>", "Element:", element)
-		vmstats["vm1"][key] = element    
-	}
-	for key, element := range data["removed"] {
-		fmt.Println("Key:", key, "=>", "Element:", element)
-        delete(vmstats["vm1"], key)
-    }
 }
 
 
@@ -73,7 +74,7 @@ func main() {
 
 	go func() {
 		for d := range msgs {
-			var data map[string]map[string]map[string]string
+			var data map[string]map[string]map[string]map[string]string
 			err := json.Unmarshal([]byte(d.Body), &data)
 			if err != nil {
 				panic(err)
