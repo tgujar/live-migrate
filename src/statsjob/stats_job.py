@@ -49,7 +49,7 @@ for i in metrics:
     print(metrics[i])
 
 
-with open(filename, 'w', encoding='utf-8') as outfile:
+with open(filename, 'w+', encoding='utf-8') as outfile:
     json.dump(metrics, outfile)
 
 diff = { IPAddr : dict_diff(old_data, metrics)}

@@ -1,6 +1,6 @@
 # add any config params here e.g. coeff to determine how easily migrations are allowed
-nfsPath: /data
-managerURL: http://172.31.4.161:8090
+nfsPath: /efs
+managerURL: http://172.31.31.122:8090
 shellPath: /bin/bash
 precheckpoint_iters: 5
 precheckpoint_delayms: 5 

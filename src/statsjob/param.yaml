@@ -1,4 +1,4 @@
-rabbitmqIP: 172.31.4.161
+rabbitmqIP: 172.31.31.122
 rabbimqUser: user1
 rabbitmqPass: password
 rabbitmqPort: 5672
