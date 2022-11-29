@@ -13,8 +13,9 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+var mu sync.Mutex
+
 type cstats struct {
-	mu         sync.Mutex
 	Containers map[string]map[string]string
 	AliveTime  time.Time
 }
@@ -40,11 +41,11 @@ func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	userIP = net.ParseIP(strings.Split(userIP, ":")[0]).String()
 	cstat := vmstats[userIP]
-	cstat.mu.Lock()
+	mu.Lock()
 	cstat.AliveTime = time.Now()
 	vmstats[userIP] = cstat
-	log.Println(userIP)
-	cstat.mu.Lock()
+	// log.Println(userIP)
+	mu.Unlock()
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -52,31 +53,28 @@ func updateMap(data map[string]map[string]map[string]map[string]string) {
 	for vm, vmmap := range data {
 		log.Printf("Received message: %s :: %s", vm, vmmap)
 		cstat := vmstats[vm]
-		cstat.mu.Lock()
+		mu.Lock()
 		if cstat.Containers == nil {
 			cstat.Containers = make(map[string]map[string]string)
 		}
 		for key, element := range vmmap["value_diffs"] {
-			fmt.Println("Key:", key, "=>", "Element:", element)
 			cstat.Containers[key] = element
 		}
 		for key, element := range vmmap["added"] {
-			fmt.Println("Key:", key, "=>", "Element:", element)
 			cstat.Containers[key] = element
 		}
-		for key, element := range vmmap["removed"] {
-			fmt.Println("Key:", key, "=>", "Element:", element)
+		for key, _ := range vmmap["removed"] {
 			delete(cstat.Containers, key)
 		}
 		vmstats[vm] = cstat
-		cstat.mu.Unlock()
+		mu.Unlock()
 	}
 }
 
 func main() {
 
 	vmstats = make(map[string]cstats)
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	conn, err := amqp.Dial("amqp://user1:password@0.0.0.0:5672/")
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 
@@ -109,6 +107,7 @@ func main() {
 
 	go func() {
 		for d := range msgs {
+			log.Println("RECEIVED MESSAGE")
 			var data map[string]map[string]map[string]map[string]string
 			err := json.Unmarshal([]byte(d.Body), &data)
 			if err != nil {
@@ -119,6 +118,7 @@ func main() {
 			fmt.Println("-------------Map-------------")
 			for k, v := range vmstats {
 				fmt.Println(k, v)
+				fmt.Println("--------------------------")
 			}
 		}
 	}()
@@ -132,11 +132,11 @@ func main() {
 	go func() {
 		currtime := time.Now().Add(time.Minute * -1)
 		for k, v := range vmstats {
-			v.mu.Lock()
+			mu.Lock()
 			if v.AliveTime.Before(currtime) {
 				delete(vmstats, k)
 			}
-			v.mu.Unlock()
+			mu.Unlock()
 		}
 	}()
 
