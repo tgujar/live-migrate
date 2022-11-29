@@ -11,7 +11,7 @@ config = yaml.load("param.yaml")
 
 
 filename = 'data.json'
-with open(filename, 'r', encoding='utf-8') as infile:
+with open(filename, 'w+', encoding='utf-8') as infile:
     try:
         print("Loading")
         old_data = json.load(infile)

@@ -1,14 +1,26 @@
 package main
 
 import (
-	"log"
-	"fmt"
 	"encoding/json"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-var vmstats map[string]map[string]map[string]string	
+var mu sync.Mutex
+
+type cstats struct {
+	Containers map[string]map[string]string
+	AliveTime  time.Time
+}
+
+var vmstats map[string]cstats
 
 func failOnError(err error, msg string) {
 	if err != nil {
@@ -16,32 +28,53 @@ func failOnError(err error, msg string) {
 	}
 }
 
+func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
+	var userIP string
+	if len(r.Header.Get("CF-Connecting-IP")) > 1 {
+		userIP = r.Header.Get("CF-Connecting-IP")
+	} else if len(r.Header.Get("X-Forwarded-For")) > 1 {
+		userIP = r.Header.Get("X-Forwarded-For")
+	} else if len(r.Header.Get("X-Real-IP")) > 1 {
+		userIP = r.Header.Get("X-Real-IP")
+	} else {
+		userIP = r.RemoteAddr
+	}
+	userIP = net.ParseIP(strings.Split(userIP, ":")[0]).String()
+	cstat := vmstats[userIP]
+	mu.Lock()
+	cstat.AliveTime = time.Now()
+	vmstats[userIP] = cstat
+	// log.Println(userIP)
+	mu.Unlock()
+	w.WriteHeader(http.StatusOK)
+}
+
 func updateMap(data map[string]map[string]map[string]map[string]string) {
 	for vm, vmmap := range data {
 		log.Printf("Received message: %s :: %s", vm, vmmap)
-		if(vmstats[vm] == nil) {
-			vmstats[vm] = make(map[string]map[string]string)
+		cstat := vmstats[vm]
+		mu.Lock()
+		if cstat.Containers == nil {
+			cstat.Containers = make(map[string]map[string]string)
 		}
 		for key, element := range vmmap["value_diffs"] {
-			fmt.Println("Key:", key, "=>", "Element:", element)
-			vmstats[vm][key] = element
+			cstat.Containers[key] = element
 		}
 		for key, element := range vmmap["added"] {
-			fmt.Println("Key:", key, "=>", "Element:", element)
-			vmstats[vm][key] = element    
+			cstat.Containers[key] = element
 		}
-		for key, element := range vmmap["removed"] {
-			fmt.Println("Key:", key, "=>", "Element:", element)
-			delete(vmstats[vm], key)
+		for key, _ := range vmmap["removed"] {
+			delete(cstat.Containers, key)
 		}
+		vmstats[vm] = cstat
+		mu.Unlock()
 	}
 }
 
-
 func main() {
-	
-	vmstats = make(map[string]map[string]map[string]string)
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+
+	vmstats = make(map[string]cstats)
+	conn, err := amqp.Dial("amqp://user1:password@0.0.0.0:5672/")
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 
@@ -74,17 +107,36 @@ func main() {
 
 	go func() {
 		for d := range msgs {
+			log.Println("RECEIVED MESSAGE")
 			var data map[string]map[string]map[string]map[string]string
 			err := json.Unmarshal([]byte(d.Body), &data)
 			if err != nil {
 				panic(err)
 			}
-			updateMap(data);
-			
+			updateMap(data)
+
 			fmt.Println("-------------Map-------------")
 			for k, v := range vmstats {
 				fmt.Println(k, v)
+				fmt.Println("--------------------------")
 			}
+		}
+	}()
+
+	go func() {
+		log.Println("Serving HeartBeat Server")
+		http.HandleFunc("/heartbeat", heartbeatHandler)
+		http.ListenAndServe("0.0.0.0:8090", nil)
+	}()
+
+	go func() {
+		currtime := time.Now().Add(time.Minute * -1)
+		for k, v := range vmstats {
+			mu.Lock()
+			if v.AliveTime.Before(currtime) {
+				delete(vmstats, k)
+			}
+			mu.Unlock()
 		}
 	}()
 
