@@ -1,0 +1,6 @@
+# add any config params here e.g. coeff to determine how easily migrations are allowed
+nfsPath: /data
+managerURL: google.com
+shellPath: /bin/bash
+precheckpoint_iters: 5
+precheckpoint_delayms: 5 
