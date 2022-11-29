@@ -11,8 +11,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"runtime"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/robfig/cron/v3"
 )
 
 var mu sync.Mutex
@@ -164,18 +166,20 @@ func UpdateMigration(vm_map map[string]Cstats) map[string]map[string]string {
 	var vm_cont_map map[string]map[string]float64 = make(map[string]map[string]float64)
 	for vm_id, cstat_val := range vm_map {
 		vm_cont_map[vm_id] = make(map[string]float64)
-		for cont_id, cont_values := range cstat_val.Containers {
+		for _, cont_values := range cstat_val.Containers {
 			cpu_util_string := cont_values["cpu_util"]
 			last_ind := len(cpu_util_string) - 1
 			cpu_util_string = cpu_util_string[:last_ind]
-
+			
 			cpu_util_val, err := strconv.ParseFloat(cpu_util_string, 64)
 			cpu_util_val = cpu_util_val / 100.0
 			if err != nil {
 				fmt.Println("Got Error converting CPU string to float")
 			}
-
-			vm_cont_map[vm_id][cont_id] = cpu_util_val
+			
+			cont_name := cont_values["name"]
+			vm_cont_map[vm_id][cont_name] = cpu_util_val
+			// vm_cont_map[vm_id][cont_id] = cpu_util_val
 		}
 	}
 
@@ -203,8 +207,8 @@ func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
 		userIP = r.RemoteAddr
 	}
 	userIP = net.ParseIP(strings.Split(userIP, ":")[0]).String()
-	cstat := VMstats[userIP]
 	mu.Lock()
+	cstat := VMstats[userIP]
 	cstat.AliveTime = time.Now()
 	VMstats[userIP] = cstat
 	// log.Println(userIP)
@@ -215,8 +219,8 @@ func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
 func updateMap(data map[string]map[string]map[string]map[string]string) {
 	for vm, vmmap := range data {
 		log.Printf("Received message: %s :: %s", vm, vmmap)
-		cstat := VMstats[vm]
 		mu.Lock()
+		cstat := VMstats[vm]
 		if cstat.Containers == nil {
 			cstat.Containers = make(map[string]map[string]string)
 		}
@@ -230,11 +234,15 @@ func updateMap(data map[string]map[string]map[string]map[string]string) {
 			delete(cstat.Containers, key)
 		}
 		VMstats[vm] = cstat
+		log.Printf("Updated Map: %s -> %s", vm, cstat)
 		mu.Unlock()
 	}
 }
 
 func main() {
+
+	
+	fmt.Println(runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	VMstats = make(map[string]Cstats)
 	conn, err := amqp.Dial("amqp://user1:password@0.0.0.0:5672/")
@@ -277,44 +285,12 @@ func main() {
 				panic(err)
 			}
 			updateMap(data)
-
-			fmt.Println("-------------Map-------------")
+			fmt.Println("------------------UpdatedMap------------------")
 			for k, v := range VMstats {
 				fmt.Println(k, v)
-				fmt.Println("--------------------------")
+				fmt.Println("-----------------------------------------------")
 			}
-		}
-	}()
-
-	go func() {
-		for range time.Tick(time.Second * 5) {
-			mu.Lock()
-			migration_map := UpdateMigration(VMstats)
-			mu.Unlock()
-
-			fmt.Println("Migration Map:",  migration_map)
-
-			if len(migration_map) > 0 {
-				for cont_id, vm_vals := range migration_map {
-					for vm_start, vm_end := range vm_vals {
-						fmt.Println("Moving %s from %s ----> %s", cont_id, vm_start, vm_end)
-						start_http := "http://" + vm_start + ":8080/checkpoint?id=" + cont_id
-						end_http := "http://" + vm_end + ":8080/restore?id=" + cont_id
-
-						_, err_start := http.Get(start_http)
-						if err_start != nil {
-							fmt.Println(err_start)
-						}
-						fmt.Println("Checkpointed")
-
-						_, err_end := http.Get(end_http)
-						if err_end != nil {
-							fmt.Println(err_start)
-						}
-						fmt.Println("Restored")
-					}
-				}
-			}
+			fmt.Println("-----------------------------------------------")
 		}
 	}()
 
@@ -325,20 +301,55 @@ func main() {
 	}()
 
 	go func() {
-		fmt.Println("-------------Map-------------")
-		for k, v := range VMstats {
-			fmt.Println(k, v)
-			fmt.Println("--------------------------")
-		}
-		currtime := time.Now().Add(time.Minute * -1)
-		for k, v := range VMstats {
-			mu.Lock()
-			if v.AliveTime.Before(currtime) {
-				delete(VMstats, k)
-			}
-			mu.Unlock()
-		}
 	}()
+
+	c := cron.New()
+	c.AddFunc("@every 2m", func() {
+		// mu.Lock()
+		migration_map := UpdateMigration(VMstats)
+		// mu.Unlock()
+		fmt.Println("Migration Map:",  migration_map)
+		if len(migration_map) > 0 {
+			for cont_id, vm_vals := range migration_map {
+				for vm_start, vm_end := range vm_vals {
+					fmt.Println("Moving %s from %s ----> %s", cont_id, vm_start, vm_end)
+					start_http := "http://" + vm_start + ":8080/checkpoint?id=" + cont_id
+					end_http := "http://" + vm_end + ":8080/restore?id=" + cont_id
+
+					_, err_start := http.Get(start_http)
+					if err_start != nil {
+						fmt.Println(err_start)
+					}
+					fmt.Println("Checkpointed")
+
+					_, err_end := http.Get(end_http)
+					if err_end != nil {
+						fmt.Println(err_start)
+					}
+					fmt.Println("Restored")
+				}
+			}
+		}
+	})
+
+	// c.AddFunc("@every 1m", func() {
+	// 	mu.Lock()
+	// 	fmt.Println("-------------Map-------------")
+	// 	for k, v := range VMstats {
+	// 		fmt.Println(k, v)
+	// 		fmt.Println("--------------------------")
+	// 	}
+	// 	currtime := time.Now().Add(time.Minute * -1)
+	// 	for k, v := range VMstats {
+	// 		if v.AliveTime.Before(currtime) {
+	// 			delete(VMstats, k)
+	// 		}
+	// 	}
+	// 	mu.Unlock()
+	// })
+	c.Start()
+
+	
 
 	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
 	<-forever

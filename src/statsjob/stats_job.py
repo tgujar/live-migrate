@@ -9,7 +9,7 @@ with open('./param.yaml', 'r') as f:
   config = yaml.load(f, Loader=yaml.FullLoader)
 
 filename = 'data.json'
-with open(filename, 'w+', encoding='utf-8') as infile:
+with open(filename, 'r', encoding='utf-8') as infile:
     try:
         print("Loading")
         old_data = json.load(infile)
