@@ -81,7 +81,7 @@ func (c *conf) checkpoint(id string) error {
 		}
 		time.Sleep(time.Duration(c.PreChkDelay * int(time.Millisecond)))
 	}
-	_, errStr, err := c.Shellout(fmt.Sprintf("podman container checkpoint --with-previous -e %s %s", c.getPath(id, false), id))
+	_, errStr, err := c.Shellout(fmt.Sprintf("podman container checkpoint --ignore-rootfs --file-locks --tcp-established --with-previous -e %s %s", c.getPath(id, false), id))
 	if perr := checkErr(errStr, err); perr != nil {
 		return perr
 	}
@@ -103,7 +103,7 @@ func (c *conf) CheckpointHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *conf) restore(id string) error {
-	_, errStr, err := c.Shellout(fmt.Sprintf("podman container restore --import-previous %s --import %s", c.getPath(id, true), c.getPath(id, false)))
+	_, errStr, err := c.Shellout(fmt.Sprintf("podman container restore --ignore-rootfs --file-locks --tcp-established --import-previous %s --import %s", c.getPath(id, true), c.getPath(id, false)))
 	perr := checkErr(errStr, err)
 	return perr
 }
