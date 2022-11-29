@@ -82,6 +82,10 @@ func (c *conf) checkpoint(id string) error {
 		time.Sleep(time.Duration(c.PreChkDelay * int(time.Millisecond)))
 	}
 	_, errStr, err := c.Shellout(fmt.Sprintf("podman container checkpoint --with-previous -e %s %s", c.getPath(id, false), id))
+	if perr := checkErr(errStr, err); perr != nil {
+		return perr
+	}
+	_, errStr, err = c.Shellout(fmt.Sprintf("podman container rm %s", id))
 	perr := checkErr(errStr, err)
 	return perr
 }
