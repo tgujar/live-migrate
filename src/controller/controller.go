@@ -74,7 +74,9 @@ func scheduleMigration(vm_container_map map[string]map[string]float64, target fl
 			keys := make([]string, 0, len(element))
 
 			for key_elem := range element {
-				keys = append(keys, key_elem)
+				if element[key_elem] >= 0.009 {
+					keys = append(keys, key_elem)
+				}
 			}
 
 			sort.SliceStable(keys, func(i, j int) bool {
