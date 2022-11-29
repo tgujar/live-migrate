@@ -1,17 +1,15 @@
 import os
 import json
-import deepdiff
 import pika
-import socket
 import yaml
 
-hostname=socket.gethostname()
-IPAddr=socket.gethostbyname(hostname)
-config = yaml.load("param.yaml")
-
+IPAddr=".".join(os.uname().nodename.split("-")[1:])
+config = dict()
+with open('./param.yaml', 'r') as f:
+  config = yaml.load(f, Loader=yaml.FullLoader)
 
 filename = 'data.json'
-with open(filename, 'w+', encoding='utf-8') as infile:
+with open(filename, 'r', encoding='utf-8') as infile:
     try:
         print("Loading")
         old_data = json.load(infile)
@@ -43,7 +41,7 @@ def getMetrics(metrics, stream):
         }
 
 metrics = {}
-stream = os.popen('sudo podman stats -a --no-stream')
+stream = os.popen('sudo podman stats --no-stream')
 output = stream.read()
 getMetrics(metrics, output)
 
@@ -56,7 +54,7 @@ with open(filename, 'w', encoding='utf-8') as outfile:
 
 diff = { IPAddr : dict_diff(old_data, metrics)}
 
-connection = pika.BlockingConnection(pika.ConnectionParameters(config["managerURL"]))
+connection = pika.BlockingConnection(pika.ConnectionParameters(config["rabbitmqIP"], int(config["rabbitmqPort"]), "/", pika.PlainCredentials(config["rabbimqUser"], config["rabbitmqPass"])))
 channel = connection.channel()
 channel.queue_declare(queue='hello')
 channel.basic_publish(exchange='',

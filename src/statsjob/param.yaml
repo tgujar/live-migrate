@@ -1,1 +1,4 @@
-managerURL: http://172.31.4.161:8090
+rabbitmqIP: 172.31.4.161
+rabbimqUser: user1
+rabbitmqPass: password
+rabbitmqPort: 5672
