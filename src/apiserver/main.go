@@ -127,5 +127,5 @@ func main() {
 	http.HandleFunc("/checkpoint", c.CheckpointHandler)
 	http.HandleFunc("/restore", c.RestoreHandler)
 	go c.heartbeat()
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe("0.0.0.0:8080", nil)
 }

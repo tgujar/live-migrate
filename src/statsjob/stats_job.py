@@ -3,9 +3,11 @@ import json
 import deepdiff
 import pika
 import socket
+import yaml
 
 hostname=socket.gethostname()
 IPAddr=socket.gethostbyname(hostname)
+config = yaml.load("param.yaml")
 
 
 filename = 'data.json'
@@ -54,7 +56,7 @@ with open(filename, 'w', encoding='utf-8') as outfile:
 
 diff = { IPAddr : dict_diff(old_data, metrics)}
 
-connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+connection = pika.BlockingConnection(pika.ConnectionParameters(config["managerURL"]))
 channel = connection.channel()
 channel.queue_declare(queue='hello')
 channel.basic_publish(exchange='',
