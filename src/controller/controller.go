@@ -15,12 +15,12 @@ import (
 
 var mu sync.Mutex
 
-type cstats struct {
+type Cstats struct {
 	Containers map[string]map[string]string
 	AliveTime  time.Time
 }
 
-var vmstats map[string]cstats
+var VMstats map[string]Cstats
 
 func failOnError(err error, msg string) {
 	if err != nil {
@@ -40,10 +40,10 @@ func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
 		userIP = r.RemoteAddr
 	}
 	userIP = net.ParseIP(strings.Split(userIP, ":")[0]).String()
-	cstat := vmstats[userIP]
+	cstat := VMstats[userIP]
 	mu.Lock()
 	cstat.AliveTime = time.Now()
-	vmstats[userIP] = cstat
+	VMstats[userIP] = cstat
 	// log.Println(userIP)
 	mu.Unlock()
 	w.WriteHeader(http.StatusOK)
@@ -52,7 +52,7 @@ func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
 func updateMap(data map[string]map[string]map[string]map[string]string) {
 	for vm, vmmap := range data {
 		log.Printf("Received message: %s :: %s", vm, vmmap)
-		cstat := vmstats[vm]
+		cstat := VMstats[vm]
 		mu.Lock()
 		if cstat.Containers == nil {
 			cstat.Containers = make(map[string]map[string]string)
@@ -66,14 +66,14 @@ func updateMap(data map[string]map[string]map[string]map[string]string) {
 		for key, _ := range vmmap["removed"] {
 			delete(cstat.Containers, key)
 		}
-		vmstats[vm] = cstat
+		VMstats[vm] = cstat
 		mu.Unlock()
 	}
 }
 
 func main() {
 
-	vmstats = make(map[string]cstats)
+	VMstats = make(map[string]Cstats)
 	conn, err := amqp.Dial("amqp://user1:password@0.0.0.0:5672/")
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
@@ -116,9 +116,36 @@ func main() {
 			updateMap(data)
 
 			fmt.Println("-------------Map-------------")
-			for k, v := range vmstats {
+			for k, v := range VMstats {
 				fmt.Println(k, v)
 				fmt.Println("--------------------------")
+			}
+		}
+	}()
+
+	go func() {
+		for range time.Tick(time.Second * 5) {
+			mu.Lock()
+			migration_map := updateMigration(VMstats)
+			mu.Unlock()
+
+			if len(migration_map) > 0 {
+				for cont_id, vm_vals := range migration_map {
+					for vm_start, vm_end := range vm_vals {
+						start_http := "http://" + vm_start + "/checkpoint?id=" + cont_id
+						end_http := "http://" + vm_end + "/restore?id=" + cont_id
+
+						_, err_start := http.Get(start_http)
+						if err_start != nil {
+							fmt.Println(err_start)
+						}
+
+						_, err_end := http.Get(end_http)
+						if err_end != nil {
+							fmt.Println(err_start)
+						}
+					}
+				}
 			}
 		}
 	}()
@@ -131,10 +158,10 @@ func main() {
 
 	go func() {
 		currtime := time.Now().Add(time.Minute * -1)
-		for k, v := range vmstats {
+		for k, v := range VMstats {
 			mu.Lock()
 			if v.AliveTime.Before(currtime) {
-				delete(vmstats, k)
+				delete(VMstats, k)
 			}
 			mu.Unlock()
 		}
