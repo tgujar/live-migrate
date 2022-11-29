@@ -74,7 +74,7 @@ func scheduleMigration(vm_container_map map[string]map[string]float64, target fl
 			keys := make([]string, 0, len(element))
 
 			for key_elem := range element {
-				if element[key_elem] >= 0.009 {
+				if element[key_elem] >= 0.000009 {
 					keys = append(keys, key_elem)
 				}
 			}
