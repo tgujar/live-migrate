@@ -292,6 +292,8 @@ func main() {
 			migration_map := UpdateMigration(VMstats)
 			mu.Unlock()
 
+			fmt.Println("Migration Map:",  migration_map)
+
 			if len(migration_map) > 0 {
 				for cont_id, vm_vals := range migration_map {
 					for vm_start, vm_end := range vm_vals {
