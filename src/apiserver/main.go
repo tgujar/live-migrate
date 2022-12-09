@@ -85,9 +85,8 @@ func (c *conf) checkpoint(id string) error {
 	if perr := checkErr(errStr, err); perr != nil {
 		return perr
 	}
-	_, errStr, err = c.Shellout(fmt.Sprintf("podman container rm %s", id))
-	perr := checkErr(errStr, err)
-	return perr
+	go c.Shellout(fmt.Sprintf("podman container rm -f %s", id))
+	return nil
 }
 
 func (c *conf) CheckpointHandler(w http.ResponseWriter, r *http.Request) {
