@@ -121,11 +121,31 @@ func (c *conf) RestoreHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+func (c *conf) create(image string) error {
+	_, errStr, err := c.Shellout(fmt.Sprintf("podman run -d %s", image))
+	perr := checkErr(errStr, err)
+	return perr
+}
+
+func (c *conf) CreateHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("image")
+	err := c.create(id)
+	resp := struct{ Error string }{Error: ""}
+	if err != nil {
+		resp.Error = fmt.Sprint(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
 func main() {
 	var c conf
 	c.getConf("params.yaml")
 	http.HandleFunc("/checkpoint", c.CheckpointHandler)
 	http.HandleFunc("/restore", c.RestoreHandler)
+	http.HandleFunc("/create", c.CreateHandler)
 	go c.heartbeat()
 	http.ListenAndServe("0.0.0.0:8080", nil)
 }
