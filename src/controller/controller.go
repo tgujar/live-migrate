@@ -157,6 +157,56 @@ func scheduleMigration(vm_container_map map[string]map[string]float64, target fl
 
 }
 
+func initialScheduleMigration(vm_container_map map[string]map[string]float64) map[string]map[string]string {
+
+	vm_total := make(map[string]float64)
+	container_map := make(map[string]float64)
+	vm_mapping := make(map[string]string)
+	container_init_vms := make(map[string]string)
+
+	for key, element := range vm_container_map {
+
+		vm_total[key] = 100.0
+		for cont_id, cpu_perc := range element {
+			container_map[cont_id] = cpu_perc
+			container_init_vms[cont_id] = key
+		}
+	}
+
+	container_vals := make([]string, 0, len(container_map))
+	for cont_val := range container_map {
+		container_vals = append(container_vals, cont_val)
+	}
+	sort.SliceStable(container_vals, func(i, j int) bool {
+		return container_map[container_vals[i]] >= container_map[container_vals[j]]
+	})
+
+	for _, cont_val := range container_vals {
+		max_vm_val := 0.0
+		max_vm := ""
+
+		for vm_key, vm_val := range vm_total {
+			if vm_val >= max_vm_val {
+				max_vm_val = vm_val
+				max_vm = vm_key
+			}
+		}
+		vm_total[max_vm] -= container_map[cont_val]
+		vm_mapping[cont_val] = max_vm
+	}
+
+	vm_map_from_to := make(map[string]map[string]string)
+
+	for k, v := range vm_mapping {
+		init_vm := container_init_vms[k]
+		vm_map_from_to[k] = make(map[string]string)
+		vm_map_from_to[k][init_vm] = v
+	}
+
+	return vm_map_from_to
+
+}
+
 // Map from string to Cstats
 // Cstats: {"84e30906595e": {"name": "peaceful_hoover", "cpu_util": "2.01%"}}
 func UpdateMigration(vm_map map[string]Cstats) map[string]map[string]string {
